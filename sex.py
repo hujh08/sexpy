@@ -3,7 +3,7 @@
 # class to handle sextractor's result
 #   mainly output catalog and segmentation, a check image
 
-from math import floor
+from math import floor, ceil
 import numpy as np
 
 from astropy.io import fits
@@ -134,12 +134,18 @@ class Sex:
 
         return self.region_seg(seg)
 
+    def parameters_seg(self, seg):
+        '''
+        parameters in catalog for a given seg
+        '''
+        return self.catas[seg-1]
+
     def parameters(self, ra, dec):
         '''
         parameters in catalog for a giving ra dec
         '''
         seg=self.indseg(ra, dec)
-        return self.catas[seg-1]
+        return self.parameters_seg(seg)
 
     ## some frequently queried parameters
     def xcent(self, ra, dec):
@@ -177,12 +183,13 @@ class Sex:
         '''
         return self.parameters(ra, dec)['MAG_AUTO']
 
-    def gfpars(self, ra, dec):
+    def gfpars_seg(self, seg):
         '''
         all the parameters in output catalog
             which will be used in galfit
+            for a given seg
         '''
-        pars=self.parameters(ra, dec)
+        pars=self.parameters_seg(seg)
         x0=pars['X_IMAGE']
         y0=pars['Y_IMAGE']
         mag=pars['MAG_AUTO']
@@ -194,3 +201,128 @@ class Sex:
             pa-=180
 
         return x0, y0, mag, re, ba, pa
+
+    def gfpars(self, ra, dec):
+        '''
+        same as above, but giving ra, dec, not seg
+        '''
+        seg=self.indseg(ra, dec)
+
+        return self.gfpars_seg(seg)
+
+    # fit region for galfit
+    def fitregion(self, seg, margin=20,
+                             center_match=True,
+                             clip50=True):
+        '''
+        use the seg region to determine fit region
+            with expanding out by `margin` pixels
+
+        optional Parameters:
+        ----------
+        center_match: boolean
+            whether centers of target seg and fit region match
+
+        clip50: boolean
+            whether clip the semi-width to times of 50
+        '''
+        xmin, xmax, ymin, ymax=self.region_seg(seg)
+
+        xmin-=margin
+        xmax+=margin
+        ymin-=margin
+        ymax+=margin
+
+        if center_match:
+            pars=self.parameters_seg(seg)
+            x0=pars['X_IMAGE']
+            y0=pars['Y_IMAGE']
+
+            semiwx=max(x0-xmin, xmax-x0)
+            semiwy=max(y0-ymin, ymax-y0)
+
+            if clip50:
+                semiwx=ceil(semiwx/50)*50
+                semiwy=ceil(semiwy/50)*50
+            else:
+                semiwx=ceil(semiwx)
+                semiwy=ceil(semiwy)
+
+            x0=int(x0)
+            y0=int(y0)
+
+            xmin=x0-semiwx
+            xmax=x0+semiwx
+            ymin=y0-semiwy
+            ymax=y0+semiwy
+
+        # clip the exceed region
+        ny, nx=self.segs.shape
+        if xmin<1:
+            xmin=1
+        if xmax>nx:
+            xmax=nx
+        if ymin<1:
+            ymin=1
+        if ymax>ny:
+            ymax=ny
+
+        return xmin, xmax, ymin, ymax
+
+    # create mask
+    def _mask_array(self, seg):
+        '''
+        all the seg except specified `seg` are excluded in galfit
+
+        return 2d array in which
+            bad pixels are marked with value > 0
+        '''
+        mask=self.segs.copy()
+        mask[mask==seg]=0
+        return mask
+
+    def _mask_xy(self, seg, region=None):
+        '''
+        return two list of x,y coordinates of seg pixels
+            within `region`
+                if given, with format [xmin, xmax, ymin, ymax]
+                    which start from 1
+                if not, means whole image
+
+        mask gives the name of mask file
+        '''
+        ycoords, xcoords=np.indices(self.segs.shape)+1
+        mask=self._mask_array(seg)
+
+        badp=mask>0
+
+        ycoords=ycoords[badp]
+        xcoords=xcoords[badp]
+
+        if region!=None:
+            xmin, xmax, ymin, ymax=region
+            inreg=(xmin-1<=xcoords)*(xcoords<=xmax-1)*\
+                  (ymin-1<=ycoords)*(ycoords<=ymax-1)
+
+            xcoords=xcoords[inreg]
+            ycoords=ycoords[inreg]
+
+        return np.c_[xcoords, ycoords]
+
+    def mask_text(self, seg, mask, region=None):
+        '''
+        save x,y of bad pixels in an ASCII text file
+        '''
+        with open(mask, 'w') as f:
+            for x, y in self._mask_xy(seg, region):
+                f.write('%i %i\n' % (x, y))
+
+    def mask_fits(self, seg, mask, overwrite=True):
+        '''
+        save x,y of bad pixels in a FITS file
+        '''
+        fits.writeto(mask, self._mask_array(seg),
+                     overwrite=overwrite)
+
+
+
