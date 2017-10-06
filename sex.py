@@ -12,9 +12,13 @@ from astropy import wcs
 import warnings
 
 class Sex:
-    def __init__(self, catalog, seg, type='ASCII_HEAD'):
+    def __init__(self, catalog, seg, type='ASCII_HEAD',
+                       bkg=None):
         self._load_catalog(catalog, type)
         self._load_seg(seg)
+
+        if bkg!=None:
+            self.bkg=fits.getdata(bkg)
 
     # load result of sextractor
     def _load_catalog(self, catalog, type):
@@ -209,6 +213,16 @@ class Sex:
         seg=self.indseg(ra, dec)
 
         return self.gfpars_seg(seg)
+
+    # background
+    def bkg_region(self, region):
+        '''
+        average background inside the given region
+        '''
+        xmin, xmax, ymin, ymax=region
+
+        bkg=self.bkg[(ymin-1):ymax, (xmin-1):xmax]
+        return bkg.mean()
 
     # fit region for galfit
     def fitregion(self, seg, margin=20,
