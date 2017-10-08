@@ -105,7 +105,10 @@ class Sex:
             started from 1
         '''
         x, y=self.indpix(ra, dec)
-        return self.segs[y-1, x-1]
+        seg=self.segs[y-1, x-1]
+        if seg==0:
+            raise Exception('no segment found')
+        return seg
 
     def region_seg(self, seg):
         '''
