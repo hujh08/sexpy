@@ -193,7 +193,7 @@ class Sex:
     def gfpars_seg(self, seg):
         '''
         all the parameters in output catalog
-            which will be used in galfit
+            which will be used in galfit directly
             for a given seg
         '''
         pars=self.parameters_seg(seg)
@@ -201,7 +201,7 @@ class Sex:
         y0=pars['Y_IMAGE']
         mag=pars['MAG_AUTO']
         re=pars['FLUX_RADIUS']
-        ba=pars['ELLIPTICITY']
+        ba=1-pars['ELLIPTICITY']
 
         pa=pars['THETA_IMAGE']+90
         if pa>=90:
