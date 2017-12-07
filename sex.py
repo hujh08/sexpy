@@ -218,13 +218,23 @@ class Sex:
         return self.gfpars_seg(seg)
 
     # background
-    def bkg_region(self, region):
+    def bkg_region(self, region, exclude=True):
         '''
         average background inside the given region
+
+        Parameters
+        ----------
+        exclude: boolean
+            whether exclude objects before yielding bkg
         '''
         xmin, xmax, ymin, ymax=region
 
         bkg=self.bkg[(ymin-1):ymax, (xmin-1):xmax]
+
+        if exclude:
+            segs=self.segs[(ymin-1):ymax, (xmin-1):xmax]
+            bkg=bkg[segs==0]
+
         return bkg.mean()
 
     # fit region for galfit
@@ -340,6 +350,20 @@ class Sex:
         '''
         fits.writeto(mask, self._mask_array(seg),
                      overwrite=overwrite)
+
+    # detect weird object
+    def is_longslit(self, seg):
+        '''
+        target object is a long slit, maybe a cosmic ray
+        '''
+        ny, nx=self.segs.shape
+
+        xmin, xmax, ymin, ymax=self.region_seg(seg)
+
+        if (xmax-xmin+1)==nx or (ymax-ymin+1)==ny:
+            return 'yes'
+
+        return 'no'
 
 
 
