@@ -352,15 +352,15 @@ class Sex:
                      overwrite=overwrite)
 
     # detect weird object
-    def is_longslit(self, seg):
+    def is_longslit(self, seg, max_reg=0.8):
         '''
         target object is a long slit, maybe a cosmic ray
         '''
-        ny, nx=self.segs.shape
+        ny, nx=np.array(self.segs.shape)*max_reg
 
         xmin, xmax, ymin, ymax=self.region_seg(seg)
 
-        if (xmax-xmin+1)==nx or (ymax-ymin+1)==ny:
+        if (xmax-xmin+1)>=nx or (ymax-ymin+1)>=ny:
             return 'yes'
 
         return 'no'
