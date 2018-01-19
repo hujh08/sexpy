@@ -12,13 +12,60 @@ from astropy import wcs
 import warnings
 
 class Sex:
-    def __init__(self, catalog, seg, type='ASCII_HEAD',
-                       bkg=None):
+    def __init__(self, *args, **kwargs):
+        if 'config' in kwargs or len(args)<=1:
+            self._parse_config(*args, **kwargs)
+        else:
+            self._init(*args, **kwargs)
+
+    def _init(self, catalog, seg, type='ASCII_HEAD',
+                       bkg=None, bkgrms=None):
         self._load_catalog(catalog, type)
         self._load_seg(seg)
 
         if bkg!=None:
             self.bkg=fits.getdata(bkg)
+
+        if bkgrms!=None:
+            self.bkgrms=fits.getdata(bkgrms)
+
+    def _parse_config(self, config='default.sex'):
+        '''
+        load sex configuration file
+            instead of specifying parameters
+        '''
+        params=self._load_config(config)
+        self.params=params
+
+        cat_name,=params['CATALOG_NAME']
+        cat_type,=params['CATALOG_TYPE']
+
+        # check images
+        check_images=dict(zip(params['CHECKIMAGE_TYPE'],
+                              params['CHECKIMAGE_NAME']))
+        seg=check_images['SEGMENTATION']
+
+        opts={}
+        if 'BACKGROUND' in check_images:
+            opts['bkg']=check_images['BACKGROUND']
+        if 'BACKGROUND_RMS' in check_images:
+            opts['bkgrms']=check_images['BACKGROUND_RMS']
+
+        self._init(cat_name, seg, type=cat_type, **opts)
+
+    def _load_config(self, config):
+        params={}
+        with open(config) as f:
+            for l in f:
+                l=l.strip()
+                if not l or l[0]=='#':
+                    continue
+                key, vals=l.split('#')[0].split(maxsplit=1)
+                vals=[s.strip() for s in vals.split(',')]
+                params[key]=vals
+        return params
+
+
 
     # load result of sextractor
     def _load_catalog(self, catalog, type):
@@ -218,9 +265,9 @@ class Sex:
         return self.gfpars_seg(seg)
 
     # background
-    def bkg_region(self, region, exclude=True):
+    def _bkg_region(self, fits, region, exclude=True):
         '''
-        average background inside the given region
+        average background or bkg rms inside the given region
 
         Parameters
         ----------
@@ -229,13 +276,22 @@ class Sex:
         '''
         xmin, xmax, ymin, ymax=region
 
-        bkg=self.bkg[(ymin-1):ymax, (xmin-1):xmax]
+        bkg=fits[(ymin-1):ymax, (xmin-1):xmax]
 
         if exclude:
             segs=self.segs[(ymin-1):ymax, (xmin-1):xmax]
             bkg=bkg[segs==0]
 
         return bkg.mean()
+
+    def bkg_mean_region(self, *args, **kwargs):
+        return self._bkg_region(self.bkg, *args, **kwargs)
+
+    def bkg_region(self, *args, **kwargs):
+        return self.bkg_mean_region(*args, **kwargs)
+
+    def bkg_rms_region(self, *args, **kwargs):
+        return self._bkg_region(self.bkgrms, *args, **kwargs)
 
     # fit region for galfit
     def fitregion(self, seg, margin=20,
