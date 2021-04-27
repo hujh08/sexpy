@@ -3,6 +3,8 @@
 # class to handle sextractor's result
 #   mainly output catalog and segmentation, a check image
 
+import os
+
 from math import floor, ceil
 import numpy as np
 
@@ -13,6 +15,11 @@ import warnings
 
 class Sex:
     def __init__(self, *args, **kwargs):
+        '''
+            initiate via
+                sex configure file
+                or some sex result files
+        '''
         if 'config' in kwargs or len(args)<=1:
             self._parse_config(*args, **kwargs)
         else:
@@ -20,6 +27,9 @@ class Sex:
 
     def _init(self, catalog, seg, type='ASCII_HEAD',
                        bkg=None, bkgrms=None):
+        '''
+            initiate with some sex result files
+        '''
         self._load_catalog(catalog, type)
         self._load_seg(seg)
 
@@ -31,8 +41,8 @@ class Sex:
 
     def _parse_config(self, config='default.sex'):
         '''
-        load sex configuration file
-            instead of specifying parameters
+            load sex configuration file
+                instead of specifying parameters
         '''
         params=self._load_config(config)
         self.params=params
@@ -54,6 +64,15 @@ class Sex:
         self._init(cat_name, seg, type=cat_type, **opts)
 
     def _load_config(self, config):
+        '''
+            load sex configure file
+
+            return a dict {key: value}
+        '''
+        # handle sex result files
+        dir_sex=os.path.dirname(config)
+        key_sex_files=set(['CATALOG_NAME', 'CHECKIMAGE_NAME'])
+
         params={}
         with open(config) as f:
             for l in f:
@@ -61,23 +80,27 @@ class Sex:
                 if not l or l[0]=='#':
                     continue
                 key, vals=l.split('#')[0].split(maxsplit=1)
+                
                 vals=[s.strip() for s in vals.split(',')]
+                if key in key_sex_files:
+                    vals=[os.path.join(dir_sex, t) for t in vals]
+
                 params[key]=vals
         return params
-
-
 
     # load result of sextractor
     def _load_catalog(self, catalog, type):
         '''
-        information from catalog,
-            stored as a numpy record type
+            information from catalog,
+                stored as a numpy record type
         '''
         func=getattr(self, '_load_catalog_%s' % type.upper())
         func(catalog)
 
     def _handle_line(self, line, fmts, vessels):
-        # auxiliary function to load ascii_head catalog
+        '''
+            auxiliary function to load ascii_head catalog
+        '''
         for s, func, vess in zip(line.split(), fmts, vessels):
             vess.append(func(s))
 
@@ -118,9 +141,9 @@ class Sex:
 
     def _load_seg(self, segfits):
         '''
-        information from segmentation image:
-            1, index of object in catalog for each pixel
-            2, world coordination
+            information from segmentation image:
+                1, index of object in catalog for each pixel
+                2, world coordination
         '''
         hdu=fits.open(segfits)[0]
 
@@ -134,37 +157,43 @@ class Sex:
     # handle query
     def radec2pix(self, ra, dec):
         '''
-        convert world coordinate to pixel coordinate
+            convert world coordinate to pixel coordinate
         '''
         return self.w.wcs_world2pix(ra, dec, True)
 
     def indpix(self, ra, dec):
         '''
-        return integer index of pixel for giving ra dec
-            with 1,1 for the left-bottom corner
+            return integer index of pixel for giving ra dec
+                with 1,1 for the left-bottom corner
         '''
         x, y=self.radec2pix(ra, dec)
         return floor(x), floor(y)
 
-    def indseg(self, ra, dec):
+    def indseg_from_pix(self, x, y):
         '''
-        return integer index of segment for giving ra dec
-            started from 1
+            index of segment for given pixel coordinates `x`, `y`
         '''
-        x, y=self.indpix(ra, dec)
+        x, y=floor(x), floor(y)
         seg=self.segs[y-1, x-1]
         if seg==0:
             raise Exception('no segment found')
         return seg
 
+    def indseg_from_radec(self, ra, dec):
+        '''
+            return integer index of segment for giving ra dec
+                started from 1
+        '''
+        return self.indseg_from_pix(*self.radec2pix(ra, dec))
+
     def region_seg(self, seg):
         '''
-        region for a giving segment
-            represented by (xmin, xmax, ymin, ymax)
-                in which index starts from 1
+            region for a giving segment
+                represented by (xmin, xmax, ymin, ymax)
+                    in which index starts from 1
 
-        seg is integer index of segment, starting from 1
-            as in seg image
+            seg is integer index of segment, starting from 1
+                as in seg image
         '''
         ycoords, xcoords=np.indices(self.segs.shape)
         pbool=(self.segs==seg)
@@ -180,9 +209,9 @@ class Sex:
 
     def segregion(self, ra, dec):
         '''
-        region for a giving ra dec
+            region for a giving ra dec
 
-        just combine indseg and region_seg method
+            just combine indseg and region_seg method
         '''
         seg=self.indseg(ra, dec)
 
@@ -190,13 +219,13 @@ class Sex:
 
     def parameters_seg(self, seg):
         '''
-        parameters in catalog for a given seg
+            parameters in catalog for a given seg
         '''
         return self.catas[seg-1]
 
     def parameters(self, ra, dec):
         '''
-        parameters in catalog for a giving ra dec
+            parameters in catalog for a giving ra dec
         '''
         seg=self.indseg(ra, dec)
         return self.parameters_seg(seg)
@@ -213,8 +242,8 @@ class Sex:
 
     def pa(self, ra, dec):
         '''
-        galfit standard position angle
-            which means 0 for up
+            galfit standard position angle
+                which means 0 for up
         '''
         pa=self.parameters(ra, dec)['THETA_IMAGE']+90
         if pa>=90:
@@ -231,17 +260,17 @@ class Sex:
 
     def mag(self, ra, dec):
         '''
-        magnitude with zero point=20
-            which is also specified in configuration
-                by MAG_ZEROPOINT key word
+            magnitude with zero point=20
+                which is also specified in configuration
+                    by MAG_ZEROPOINT key word
         '''
         return self.parameters(ra, dec)['MAG_AUTO']
 
     def gfpars_seg(self, seg):
         '''
-        all the parameters in output catalog
-            which will be used in galfit directly
-            for a given seg
+            all the parameters in output catalog
+                which will be used in galfit directly
+                for a given seg
         '''
         pars=self.parameters_seg(seg)
         x0=pars['X_IMAGE']
@@ -258,7 +287,7 @@ class Sex:
 
     def gfpars(self, ra, dec):
         '''
-        same as above, but giving ra, dec, not seg
+            same as above, but giving ra, dec, not seg
         '''
         seg=self.indseg(ra, dec)
 
@@ -267,12 +296,12 @@ class Sex:
     # background
     def _bkg_region(self, fits, region, exclude=True):
         '''
-        average background or bkg rms inside the given region
+            average background or bkg rms inside the given region
 
-        Parameters
-        ----------
-        exclude: boolean
-            whether exclude objects before yielding bkg
+            Parameters
+            ----------
+            exclude: boolean
+                whether exclude objects before yielding bkg
         '''
         xmin, xmax, ymin, ymax=region
 
@@ -298,16 +327,16 @@ class Sex:
                              center_match=True,
                              clip50=True):
         '''
-        use the seg region to determine fit region
-            with expanding out by `margin` pixels
+            use the seg region to determine fit region
+                with expanding out by `margin` pixels
 
-        optional Parameters:
-        ----------
-        center_match: boolean
-            whether centers of target seg and fit region match
+            optional Parameters:
+            ----------
+            center_match: boolean
+                whether centers of target seg and fit region match
 
-        clip50: boolean
-            whether clip the semi-width to times of 50
+            clip50: boolean
+                whether clip the semi-width to times of 50
         '''
         xmin, xmax, ymin, ymax=self.region_seg(seg)
 
@@ -355,10 +384,10 @@ class Sex:
     # create mask
     def _mask_array(self, seg):
         '''
-        all the seg except specified `seg` are excluded in galfit
+            all the seg except specified `seg` are excluded in galfit
 
-        return 2d array in which
-            bad pixels are marked with value > 0
+            return 2d array in which
+                bad pixels are marked with value > 0
         '''
         mask=self.segs.copy()
         mask[mask==seg]=0
@@ -366,13 +395,13 @@ class Sex:
 
     def _mask_xy(self, seg, region=None):
         '''
-        return two list of x,y coordinates of seg pixels
-            within `region`
-                if given, with format [xmin, xmax, ymin, ymax]
-                    which start from 1
-                if not, means whole image
+            return two list of x,y coordinates of seg pixels
+                within `region`
+                    if given, with format [xmin, xmax, ymin, ymax]
+                        which start from 1
+                    if not, means whole image
 
-        mask gives the name of mask file
+            mask gives the name of mask file
         '''
         ycoords, xcoords=np.indices(self.segs.shape)+1
         mask=self._mask_array(seg)
@@ -394,7 +423,7 @@ class Sex:
 
     def mask_text(self, seg, mask, region=None):
         '''
-        save x,y of bad pixels in an ASCII text file
+            save x,y of bad pixels in an ASCII text file
         '''
         with open(mask, 'w') as f:
             for x, y in self._mask_xy(seg, region):
@@ -402,7 +431,7 @@ class Sex:
 
     def mask_fits(self, seg, mask, overwrite=True):
         '''
-        save x,y of bad pixels in a FITS file
+            save x,y of bad pixels in a FITS file
         '''
         fits.writeto(mask, self._mask_array(seg),
                      overwrite=overwrite)
@@ -410,7 +439,7 @@ class Sex:
     # detect weird object
     def is_longslit(self, seg, max_reg=0.8):
         '''
-        target object is a long slit, maybe a cosmic ray
+            target object is a long slit, maybe a cosmic ray
         '''
         ny, nx=np.array(self.segs.shape)*max_reg
 
@@ -420,6 +449,3 @@ class Sex:
             return 'yes'
 
         return 'no'
-
-
-
