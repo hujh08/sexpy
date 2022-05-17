@@ -39,13 +39,18 @@ class Sex:
         if bkgrms!=None:
             self.bkgrms=fits.getdata(bkgrms)
 
-    def _parse_config(self, config='default.sex'):
+    def _parse_config(self, config='default.sex', only_config=False):
         '''
             load sex configuration file
                 instead of specifying parameters
+
+            :params only_config: bool
+                whether only load configure file
+
+                if False, not load FITS file
         '''
         params=self._load_config(config)
-        self.params=params
+        self._params=params
 
         cat_name,=params['CATALOG_NAME']
         cat_type,=params['CATALOG_TYPE']
@@ -60,6 +65,12 @@ class Sex:
             opts['bkg']=check_images['BACKGROUND']
         if 'BACKGROUND_RMS' in check_images:
             opts['bkgrms']=check_images['BACKGROUND_RMS']
+
+        self._check_images=check_images
+
+        # only load configure file
+        if only_config:
+            return
 
         self._init(cat_name, seg, type=cat_type, **opts)
 
@@ -153,6 +164,32 @@ class Sex:
 
         # indices in output catalog, started from 1
         self.segs=hdu.data
+
+    # get sex params
+    def get_sex_param(self, key):
+        '''
+            get param of Sextractor config
+        '''
+        return self._params[key.upper()]
+
+    def get_sex_params_file(self):
+        '''
+            get file name of sex parameters file
+        '''
+        return self.get_sex_param('PARAMETERS_NAME')
+
+    # get check image
+    def get_check_image(self, key):
+        '''
+            get path of check image
+        '''
+        return self._check_images[key.upper()]
+
+    def get_seg_image(self):
+        '''
+            get segmentation image
+        '''
+        return self.get_check_image('SEGMENTATION')
 
     # handle query
     def radec2pix(self, ra, dec):
