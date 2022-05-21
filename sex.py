@@ -206,22 +206,25 @@ class Sex:
         x, y=self.radec2pix(ra, dec)
         return floor(x), floor(y)
 
-    def indseg_from_pix(self, x, y):
+    def indseg_from_pix(self, x, y, allow_nullseg=True):
         '''
             index of segment for given pixel coordinates `x`, `y`
         '''
         x, y=floor(x), floor(y)
         seg=self.segs[y-1, x-1]
         if seg==0:
+            if allow_nullseg:
+                return None
+                
             raise Exception('no segment found')
         return seg
 
-    def indseg_from_radec(self, ra, dec):
+    def indseg_from_radec(self, ra, dec, **kwargs):
         '''
             return integer index of segment for giving ra dec
                 started from 1
         '''
-        return self.indseg_from_pix(*self.radec2pix(ra, dec))
+        return self.indseg_from_pix(*self.radec2pix(ra, dec), **kwargs)
 
     def region_seg(self, seg):
         '''
