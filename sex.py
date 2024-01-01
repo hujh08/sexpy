@@ -422,7 +422,7 @@ class Sex:
         return xmin, xmax, ymin, ymax
 
     # create mask
-    def _mask_array(self, seg):
+    def mask_array(self, seg):
         '''
             all the seg except specified `seg` are excluded in galfit
 
@@ -433,7 +433,7 @@ class Sex:
         mask[mask==seg]=0
         return mask
 
-    def _mask_xy(self, seg, region=None):
+    def mask_xy(self, seg, region=None):
         '''
             return two list of x,y coordinates of seg pixels
                 within `region`
@@ -444,7 +444,7 @@ class Sex:
             mask gives the name of mask file
         '''
         ycoords, xcoords=np.indices(self.segs.shape)+1
-        mask=self._mask_array(seg)
+        mask=self.mask_array(seg)
 
         badp=mask>0
 
@@ -466,14 +466,14 @@ class Sex:
             save x,y of bad pixels in an ASCII text file
         '''
         with open(mask, 'w') as f:
-            for x, y in self._mask_xy(seg, region):
+            for x, y in self.mask_xy(seg, region):
                 f.write('%i %i\n' % (x, y))
 
     def mask_fits(self, seg, mask, overwrite=True):
         '''
             save x,y of bad pixels in a FITS file
         '''
-        fits.writeto(mask, self._mask_array(seg),
+        fits.writeto(mask, self.mask_array(seg),
                      overwrite=overwrite)
 
     # detect weird object
